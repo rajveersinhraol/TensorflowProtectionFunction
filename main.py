@@ -10,12 +10,33 @@ logs_path = '/tmp/tensorflow_logs/example'
 DATA_LENGTH_SECONDS = 10
 SYSTEM_FREQUENCY = 60
 PACKETS_PER_CYCLE = 8
+
+NOMINAL = 5
 NumCycles = int(np.ceil(DATA_LENGTH_SECONDS*SYSTEM_FREQUENCY))
 TOTAL_PACKETS = int(PACKETS_PER_CYCLE * NumCycles)
 print("Num of cycles = " + str(NumCycles))
 print("total number of packets  = " + str(TOTAL_PACKETS))
 print("Packets per cycle  = " + str(PACKETS_PER_CYCLE))
 
+def Seq(A, B, C):
+    with tf.name_scope('Seq'):
+        Preal = [A[0], B[0], C[0]]
+        Pimag = [A[1], B[1], C[1]]       
+        BRealPlusCReal = Preal[1] + Preal[2]
+        BRealMinusCReal = (Preal[1] - Preal[2])
+        
+        BImagPlusCImag = Pimag[1] + Pimag[2]
+        BImagMinusCImag = Pimag[1] - Pimag[2]
+        
+        Pos_real_part = (Preal[0] - BRealPlusCReal * 0.5 - BImagMinusCImag * (np.sqrt(3) / 2.0)) * (1.0 / 3.0)
+        Pos_imag_part = (Pimag[0] + BRealMinusCReal * (np.sqrt(3) / 2.0) - BImagPlusCImag * 0.5) * (1.0 / 3.0)
+
+        Neg_real_part = (Preal[0] - BRealPlusCReal * 0.5 + BImagMinusCImag * (np.sqrt(3) / 2.0)) * (1.0 / 3.0)
+        Neg_imag_part = (Pimag[0] - BRealMinusCReal * (np.sqrt(3) / 2.0) - BImagPlusCImag * 0.5) * (1.0 / 3.0)
+
+        Zero_real_part = (Preal[0] + Preal[1] + Preal[2]) / 3
+        Zero_imag_part = (Pimag[0] + Pimag[1] + Pimag[2]) / 3
+    return [Pos_real_part,Pos_imag_part],[Neg_real_part,Neg_imag_part],[Zero_real_part,Zero_imag_part]
         
 def Dft(A,B,C):
     #DFT constanst
@@ -24,37 +45,94 @@ def Dft(A,B,C):
     # B = tf.slice(input, [0, 1], [PACKETS_PER_CYCLE, 2])
     # C = tf.slice(input, [0, 2], [PACKETS_PER_CYCLE, 3])
     with tf.name_scope('Dft'):
-        real = (A[0] - A[4] + (1.0 / np.sqrt(2)) * (A[1] - A[3] - A[5] + A[7])) * FUND_FACTOR
-        imag = ( - A[2] + A[6] + (1.0 / np.sqrt(2)) * ( - A[1] - A[3] + A[5] + A[7])) * FUND_FACTOR
+        realA = (A[0] - A[4] + (1.0 / np.sqrt(2)) * (A[1] - A[3] - A[5] + A[7])) * FUND_FACTOR
+        imagA= ( - A[2] + A[6] + (1.0 / np.sqrt(2)) * ( - A[1] - A[3] + A[5] + A[7])) * FUND_FACTOR
+
+        realB = (B[0] - B[4] + (1.0 / np.sqrt(2)) * (B[1] - B[3] - B[5] + B[7])) * FUND_FACTOR
+        imagB= ( - B[2] + B[6] + (1.0 / np.sqrt(2)) * ( - B[1] - B[3] + B[5] + B[7])) * FUND_FACTOR
+
+        realC = (C[0] - C[4] + (1.0 / np.sqrt(2)) * (C[1] - C[3] - C[5] + C[7])) * FUND_FACTOR
+        imagC = ( - C[2] + C[6] + (1.0 / np.sqrt(2)) * ( - C[1] - C[3] + C[5] + C[7])) * FUND_FACTOR
+
+    return [realA,imagA],[realB,imagB],[realC,imagC]
+
+def MagAngle(A, B, C):
+    with tf.name_scope('Mag_Ang_Calc'):
+        real = A[0]
+        imag = A[1] 
         FundMagA = tf.sqrt(real * real + imag * imag)
-
-        real = (B[0] - B[4] + (1.0 / np.sqrt(2)) * (B[1] - B[3] - B[5] + B[7])) * FUND_FACTOR
-        imag = ( - B[2] + B[6] + (1.0 / np.sqrt(2)) * ( - B[1] - B[3] + B[5] + B[7])) * FUND_FACTOR
+        AngA = tf.atan(A[1]/A[0])
+        real = B[0]
+        imag = B[1] 
         FundMagB = tf.sqrt(real * real + imag * imag)
-
-        real = (C[0] - C[4] + (1.0 / np.sqrt(2)) * (C[1] - C[3] - C[5] + C[7])) * FUND_FACTOR
-        imag = ( - C[2] + C[6] + (1.0 / np.sqrt(2)) * ( - C[1] - C[3] + C[5] + C[7])) * FUND_FACTOR
+        AngB = tf.atan(B[1]/B[0])
+        real = C[0]
+        imag = C[1] 
         FundMagC = tf.sqrt(real * real + imag * imag)
-    return FundMagA, FundMagB, FundMagC
+        AngC = tf.atan(C[1]/C[0])
+    return [FundMagA,AngA],[FundMagB,AngB],[FundMagC,AngC]
+    
+def WaveGen(i,Amplitude):
+    with tf.name_scope('WaveGenerator'):
+        sin_wave = np.zeros((TOTAL_PACKETS, 3))
+        sin_wave[:,0] = np.linspace( 0, 2*np.pi, TOTAL_PACKETS)
+        sin_wave[:,1] = np.linspace( - (np.pi + np.pi/3), (np.pi + np.pi/3), TOTAL_PACKETS)
+        sin_wave[:, 2] = np.linspace( + (np.pi + np.pi / 3), - (np.pi + np.pi / 3), TOTAL_PACKETS)
+        a = Amplitude * sin_wave[i * PACKETS_PER_CYCLE:(i + 1) * PACKETS_PER_CYCLE, 0]
+        b = Amplitude * sin_wave[i * PACKETS_PER_CYCLE:(i + 1) * PACKETS_PER_CYCLE, 1]
+        c = Amplitude * sin_wave[i * PACKETS_PER_CYCLE:(i + 1) * PACKETS_PER_CYCLE, 2]
+    return a, b, c
+
+def dev46BC(PosSeqMagAng, NegSeqMagAng, MagAngA, MagAngB, MagAngC):
+    with tf.name_scope('46BC'):
+        PosSeqMag = PosSeqMagAng[0]
+        NegSeqMag = NegSeqMagAng[0]
+        FundMagA = MagAngA[0]
+        FundMagB = MagAngB[0]
+        FundMagC = MagAngC[0]
+        TripA = tf.placeholder(tf.bool, name='TripA')
+        TripB = tf.placeholder(tf.bool, name='TripB')
+        TripC = tf.placeholder(tf.bool, name='TripC')
+        Enable = tf.constant(1, name='Enable')
+        PickupLevel = tf.constant(10.0 , name='PickupLevel')
+        logic = tf.logical_and(tf.greater(NegSeqMag / PosSeqMag, PickupLevel), tf.greater(3 * PosSeqMag, 0.04 * NOMINAL))
+        if(logic==1):
+            TripA = tf.less( FundMagA , 0.04 * NOMINAL)
+            TripB = tf.less( FundMagB , 0.04 * NOMINAL)
+            TripC = tf.less( FundMagC, 0.04 * NOMINAL)
+        else:
+            TripA = tf.constant(False)
+            TripB = tf.constant(False)
+            TripC = tf.constant(False)
+    return TripA, TripB, TripC
+
 def main():
     #-----------------------------------------------------------------------/
     Va = tf.placeholder(tf.float32, [PACKETS_PER_CYCLE], name='InputVoltageA')
     Vb = tf.placeholder(tf.float32, [PACKETS_PER_CYCLE], name='InputVoltageB')
     Vc = tf.placeholder(tf.float32, [PACKETS_PER_CYCLE], name='InputVoltageC')
-    I = tf.placeholder(tf.float32, [PACKETS_PER_CYCLE, 3], name='InputCurrent')
+    Ia = tf.placeholder(tf.float32, [PACKETS_PER_CYCLE], name='InputCurrentA')
+    Ib = tf.placeholder(tf.float32, [PACKETS_PER_CYCLE], name='InputCurrentB')
+    Ic = tf.placeholder(tf.float32, [PACKETS_PER_CYCLE], name='InputCurrentC')
     y = tf.placeholder(tf.float32, [None, 3], name='output')
-    y = Dft(Va,Vb,Vc)
-
+    
+    complexVs = Dft(Va, Vb, Vc)
+    seqV = Seq(complexVs[0], complexVs[1], complexVs[2])
+    seqVma = MagAngle(seqV[0], seqV[1], seqV[2])
+    funMA = MagAngle(complexVs[0], complexVs[1], complexVs[2])
+    
+    complexIs = Dft(Ia, Ib, Ic)
+    seqI = Seq(complexIs[0],complexIs[1],complexIs[2])
+    seqIMA = MagAngle(seqI[0], seqI[1], seqI[2])
+    funIMA=MagAngle(complexIs[0],complexIs[1],complexIs[2])
+    y=dev46BC(seqIMA[0],seqIMA[1],funIMA[0],funIMA[1],funIMA[2])
     #-----------------------------------------------------------------------/
     with tf.Session() as sess:
         summary_writer = tf.summary.FileWriter(logs_path, graph=tf.get_default_graph())
-        sin_wave = np.zeros((TOTAL_PACKETS, 3))
-        A=69
-        sin_wave[:,0] = np.linspace( 0, 2*np.pi, TOTAL_PACKETS)
-        sin_wave[:,1] = np.linspace( - (np.pi + np.pi/3), (np.pi + np.pi/3), TOTAL_PACKETS)
-        sin_wave[:,2] = np.linspace( + (np.pi + np.pi / 3), - (np.pi + np.pi / 3), TOTAL_PACKETS)
         for i in range(NumCycles):
-            magA,magb,magc=sess.run([y[0],y[1],y[2]], feed_dict={Va: A*sin_wave[i*PACKETS_PER_CYCLE:(i+1)*PACKETS_PER_CYCLE,0],Vb: A*sin_wave[i*PACKETS_PER_CYCLE:(i+1)*PACKETS_PER_CYCLE,1],Vc: A*sin_wave[i*PACKETS_PER_CYCLE:(i+1)*PACKETS_PER_CYCLE,2]})
+            I=WaveGen(i,69)
+            output=sess.run([y[0], y[1], y[2]], feed_dict={Ia: I[0], Vb: I[1], Vc: I[2]})
+            print(output)
     #-----------------------------------------------------------------------/
     print("Run the command line:\n" \
             "--> tensorboard --logdir=/tmp/tensorflow_logs " \
