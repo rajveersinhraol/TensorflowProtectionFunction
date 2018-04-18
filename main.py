@@ -83,11 +83,6 @@ def WaveGen(i,Amplitude):
         b = Amplitude * sin_wave[i * PACKETS_PER_CYCLE:(i + 1) * PACKETS_PER_CYCLE, 1]
         c = Amplitude * sin_wave[i * PACKETS_PER_CYCLE:(i + 1) * PACKETS_PER_CYCLE, 2]*0.0
     return a, b, c
-def if_true():
-  return 1
-
-def if_false():
-  return 0
 
 def CheckIndividualTrip(FundMagA,FundMagB,FundMagC):
     TripA = tf.less( FundMagA , 0.04 * NOMINAL)
