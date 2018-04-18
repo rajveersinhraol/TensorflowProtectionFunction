@@ -107,10 +107,6 @@ def dev46BC(PosSeqMagAng, NegSeqMagAng, MagAngA, MagAngB, MagAngC):
         FundMagA = MagAngA[0]
         FundMagB = MagAngB[0]
         FundMagC = MagAngC[0]
-        Trip = tf.placeholder(tf.bool, name ='Trip')
-        TripA = tf.placeholder(tf.bool, name='TripA')
-        TripB = tf.placeholder(tf.bool, name='TripB')
-        TripC = tf.placeholder(tf.bool, name='TripC')
         Enable = tf.constant(1, name='Enable')
         PickupLevel = tf.constant(50.0 / 100, name='PickupLevel')
         Trip = tf.logical_and(tf.greater(NegSeqMag / PosSeqMag, PickupLevel), tf.greater(3 * PosSeqMag, 0.04 * NOMINAL),name='logic')
@@ -125,7 +121,6 @@ def main():
     Ia = tf.placeholder(tf.float32, [PACKETS_PER_CYCLE], name='InputCurrentA')
     Ib = tf.placeholder(tf.float32, [PACKETS_PER_CYCLE], name='InputCurrentB')
     Ic = tf.placeholder(tf.float32, [PACKETS_PER_CYCLE], name='InputCurrentC')
-    y = tf.placeholder(tf.float32, [None, 3], name='output')
     
     complexVs = Dft(Va, Vb, Vc)
     seqV = Seq(complexVs[0], complexVs[1], complexVs[2])
@@ -136,14 +131,14 @@ def main():
     seqI = Seq(complexIs[0],complexIs[1],complexIs[2])
     seqIMA = MagAngle(seqI[0], seqI[1], seqI[2])
     funIMA=MagAngle(complexIs[0],complexIs[1],complexIs[2])
-    y=dev46BC(seqIMA[0],seqIMA[1],funIMA[0],funIMA[1],funIMA[2])
+    output=dev46BC(seqIMA[0],seqIMA[1],funIMA[0],funIMA[1],funIMA[2])
     #-----------------------------------------------------------------------/
     with tf.Session() as sess:
         summary_writer = tf.summary.FileWriter(logs_path, graph=tf.get_default_graph())
         for i in range(NumCycles):
             a,b,c=WaveGen(i,NOMINAL)
-            output=sess.run([y[0], y[1], y[2]], feed_dict={Ia: a, Ib: b, Ic: c})
-            print(output)    
+            sess.run([output[0], output[1], output[2]], feed_dict={Ia: a, Ib: b, Ic: c})
+    
     #-----------------------------------------------------------------------/
     print("Run the command line:\n" \
             "--> tensorboard --logdir=/tmp/tensorflow_logs " \
