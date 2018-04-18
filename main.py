@@ -1,7 +1,6 @@
 import numpy as np
 import tensorflow as tf
-
-
+import matplotlib.pyplot as plt
 # Parameters
 #-----------------------------------------------------------------------/
 logs_path = '/tmp/tensorflow_logs/example'
@@ -11,12 +10,18 @@ DATA_LENGTH_SECONDS = 10
 SYSTEM_FREQUENCY = 60
 PACKETS_PER_CYCLE = 8
 
-NOMINAL = 5
+NOMINAL = 1
 NumCycles = int(np.ceil(DATA_LENGTH_SECONDS*SYSTEM_FREQUENCY))
 TOTAL_PACKETS = int(PACKETS_PER_CYCLE * NumCycles)
 print("Num of cycles = " + str(NumCycles))
 print("total number of packets  = " + str(TOTAL_PACKETS))
 print("Packets per cycle  = " + str(PACKETS_PER_CYCLE))
+
+t = np.linspace(0.0, DATA_LENGTH_SECONDS, TOTAL_PACKETS)
+sin_wave = np.zeros((TOTAL_PACKETS, 3))
+sin_wave[:, 0] = np.sin(2 * np.pi * 60 * t)
+sin_wave[:, 1] = np.sin(2 * np.pi * 60 * t + np.pi)
+sin_wave[:, 2] = np.sin(2 * np.pi * 60 * t - np.pi)
 
 def Seq(A, B, C):
     with tf.name_scope('Seq'):
@@ -74,15 +79,27 @@ def MagAngle(A, B, C):
     
 def WaveGen(i,Amplitude):
     with tf.name_scope('WaveGenerator'):
-        sin_wave = np.zeros((TOTAL_PACKETS, 3))
-        sin_wave[:,0] = np.linspace( 0, 2*np.pi, TOTAL_PACKETS)
-        sin_wave[:,1] = np.linspace( - (np.pi + np.pi/3), (np.pi + np.pi/3), TOTAL_PACKETS)
-        sin_wave[:, 2] = np.linspace( + (np.pi + np.pi / 3), - (np.pi + np.pi / 3), TOTAL_PACKETS)
         a = Amplitude * sin_wave[i * PACKETS_PER_CYCLE:(i + 1) * PACKETS_PER_CYCLE, 0]
         b = Amplitude * sin_wave[i * PACKETS_PER_CYCLE:(i + 1) * PACKETS_PER_CYCLE, 1]
-        c = Amplitude * sin_wave[i * PACKETS_PER_CYCLE:(i + 1) * PACKETS_PER_CYCLE, 2]
+        c = Amplitude * sin_wave[i * PACKETS_PER_CYCLE:(i + 1) * PACKETS_PER_CYCLE, 2]*0.0
     return a, b, c
+def if_true():
+  return 1
 
+def if_false():
+  return 0
+
+def CheckIndividualTrip(FundMagA,FundMagB,FundMagC):
+    TripA = tf.less( FundMagA , 0.04 * NOMINAL)
+    TripB = tf.less( FundMagB , 0.04 * NOMINAL)
+    TripC = tf.less(FundMagC, 0.04 * NOMINAL)
+    return TripA, TripB, TripC
+
+def IndividualTripFalse(FundMagA,FundMagB,FundMagC):
+    TripA = tf.constant(False)
+    TripB = tf.constant(False)
+    TripC = tf.constant(False)
+    return TripA,TripB,TripC
 def dev46BC(PosSeqMagAng, NegSeqMagAng, MagAngA, MagAngB, MagAngC):
     with tf.name_scope('46BC'):
         PosSeqMag = PosSeqMagAng[0]
@@ -90,20 +107,14 @@ def dev46BC(PosSeqMagAng, NegSeqMagAng, MagAngA, MagAngB, MagAngC):
         FundMagA = MagAngA[0]
         FundMagB = MagAngB[0]
         FundMagC = MagAngC[0]
+        Trip = tf.placeholder(tf.bool, name ='Trip')
         TripA = tf.placeholder(tf.bool, name='TripA')
         TripB = tf.placeholder(tf.bool, name='TripB')
         TripC = tf.placeholder(tf.bool, name='TripC')
         Enable = tf.constant(1, name='Enable')
-        PickupLevel = tf.constant(10.0 , name='PickupLevel')
-        logic = tf.logical_and(tf.greater(NegSeqMag / PosSeqMag, PickupLevel), tf.greater(3 * PosSeqMag, 0.04 * NOMINAL))
-        if(logic==1):
-            TripA = tf.less( FundMagA , 0.04 * NOMINAL)
-            TripB = tf.less( FundMagB , 0.04 * NOMINAL)
-            TripC = tf.less( FundMagC, 0.04 * NOMINAL)
-        else:
-            TripA = tf.constant(False)
-            TripB = tf.constant(False)
-            TripC = tf.constant(False)
+        PickupLevel = tf.constant(50.0 / 100, name='PickupLevel')
+        Trip = tf.logical_and(tf.greater(NegSeqMag / PosSeqMag, PickupLevel), tf.greater(3 * PosSeqMag, 0.04 * NOMINAL),name='logic')
+        TripA, TripB, TripC=tf.cond(tf.equal(Trip, tf.constant(True)), lambda: CheckIndividualTrip(FundMagA,FundMagB,FundMagC), lambda: IndividualTripFalse(FundMagA,FundMagB,FundMagC),name='TripCheck')
     return TripA, TripB, TripC
 
 def main():
@@ -130,9 +141,9 @@ def main():
     with tf.Session() as sess:
         summary_writer = tf.summary.FileWriter(logs_path, graph=tf.get_default_graph())
         for i in range(NumCycles):
-            I=WaveGen(i,69)
-            output=sess.run([y[0], y[1], y[2]], feed_dict={Ia: I[0], Vb: I[1], Vc: I[2]})
-            print(output)
+            a,b,c=WaveGen(i,NOMINAL)
+            output=sess.run([y[0], y[1], y[2]], feed_dict={Ia: a, Ib: b, Ic: c})
+            print(output)    
     #-----------------------------------------------------------------------/
     print("Run the command line:\n" \
             "--> tensorboard --logdir=/tmp/tensorflow_logs " \
