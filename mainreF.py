@@ -94,3 +94,10 @@ with tf.Session() as sess:
     print("Run the command line:\n" \
           "--> tensorboard --logdir=/tmp/tensorflow_logs " \
           "\nThen open http://0.0.0.0:6006/ into your web browser")
+
+          def filter(input,alpha):
+    output=np.zeros(PACKETS_PER_CYCLE)
+    output[0]=input[0]
+    for i in range(1,PACKETS_PER_CYCLE):
+        output[i] = output[i-1] + (alpha*(input[i] - output[i-1]))
+    return output
